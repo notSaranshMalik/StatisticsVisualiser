@@ -128,12 +128,47 @@ class ChiPage(DefaultWindow):
 
         values[0, 0] = ''
 
+        # Check that all column titles are strings
+        for item in values[0][1:shape[0] + 1]:
+            for i in item:
+                if i.isdigit():
+                    self.label_status['text'] = 'Invalid, column titles may not have numbers in them'
+                    return False
+
+        # Check that all row titles are strings
+        for item in values.T[0][1:shape[0] + 1]:
+            for i in item:
+                if i.isdigit():
+                    self.label_status['text'] = 'Invalid, row titles may not have numbers in them'
+                    return False
+
+        # Check that all row and columns have unique names
+        names = list(values[0][1:shape[0] + 1]) + list(values.T[0][1:shape[0] + 1])
+        for i in range(len(names)):
+            names[i] = names[i].strip()
+        names = set(names)
+        if len(names) != sum(shape):
+            self.label_status['text'] = 'Invalid, row and column titles must all be unique'
+            return False
+
         # Check if all values are integers!
         try:
             new_value = values[1:shape[0] + 1, 1:shape[1] + 1].astype(np.int)
         except Exception:
             self.label_status['text'] = 'Invalid, data values need to be integers'
             return False
+
+        # Check for null rows
+        for row in new_value:
+            if not any(row):
+                self.label_status['text'] = 'Invalid, may not have null rows'
+                return False
+
+        # Check for null columns
+        for col in new_value.T:
+            if not any(col):
+                self.label_status['text'] = 'Invalid, may not have null columns'
+                return False
 
         # Check if sample size is given
         if self.sample_entry.get().strip():
@@ -150,12 +185,19 @@ class ChiPage(DefaultWindow):
         if sum(new_value.flatten()) < self.sample_size:
             self.label_status['text'] = 'Invalid, sample size must be smaller than the number of data points'
             return False
+
+        # Check if sample size is a multiple of 10
+        if self.sample_size % 10 != 0:
+            self.label_status['text'] = 'Invalid, sample size must be a multiple of 10'
+            return False
         
         # Generate self.original_data with only the data as a list
         self.original_data = new_value.tolist()
         
         # Generate self.data_values with the full list version of a pd df
-        self.make_df(values[0][1:shape[0] + 1], values[:, 0][1:shape[0] + 1])
+        rows = values[:, 0][1:shape[0] + 1]
+        cols = values[0][1:shape[1] + 1]
+        self.make_df(rows, cols)
 
         # Discard elements
         self.table_frame.destroy()
@@ -356,9 +398,21 @@ class ChiPage(DefaultWindow):
         # Make random selection
         counter = 0
         weights = []
-        data_prob = np.array(self.original_data).flatten()
-        data_prob /= sum(og_data_np)
-        choices = random.choices(range(len(data_prob)), data_prob, self.sample_size)
+        data_og = np.array(self.original_data)
+        data_prob = data_og.flatten()
+        data_prob = data_prob / sum(data_prob)
+        choices = random.choices(range(len(data_prob)), data_prob, k = self.sample_size)
+        new_data = list(Counter(choices).items())
+
+        if len(new_data) != len(data_prob):
+            chosen_elements = set()
+            for i in new_data:
+                if i[0] not in chosen_elements:
+                    chosen_elements.add(i[0])
+            unchosen = set(range(len(data_prob))) - chosen_elements
+            for i in list(unchosen):
+                new_data.append((i, 0))
+        new_data = np.array([j for i,j in sorted(new_data)]).reshape(data_og.shape)
 
         # Chi runner
         try:
@@ -366,7 +420,7 @@ class ChiPage(DefaultWindow):
             self.dof = dof
             self.data2.append(chi2)
             if single:
-                self.chi_label['text'] = f'Chi Squared Value: {round(chi2, 4)}, {dof}degrees of freedom, p-value: {round(p, 4)}'
+                self.chi_label['text'] = f'Chi Squared Value: {round(chi2, 4)}, degrees of freedom: {dof}, p-value: {round(p, 4)}'
         except Exception:
             raise ValueError
             
@@ -383,7 +437,7 @@ class ChiPage(DefaultWindow):
         except Exception:
             pass
         self.fig.canvas.draw()
-        if self.total_runs >= 5000:
+        if self.total_runs >= 10000:
             self.button_start['state'] = tk.DISABLED
             self.button_start2['state'] = tk.DISABLED
             self.button_start3['state'] = tk.DISABLED
