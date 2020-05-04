@@ -4,6 +4,7 @@ import tkinter as tk
 
 import matplotlib
 matplotlib.use("TkAgg")
+
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib import pyplot as plt
 
@@ -12,12 +13,14 @@ import pandas as pd
 from scipy import stats as scstats
 
 import random
+import os
 import math
 from collections import Counter
+import pickle
 
 
 class ChiPage(DefaultWindow):
-    '''ChiPage class for the Chi Square Simulation'''
+    '''ChiPage class for the Chi Square simulation'''
 
 
     def __init__(self, parent):
@@ -25,8 +28,8 @@ class ChiPage(DefaultWindow):
         # Super instantiation
         super().__init__(parent, width = 1000, height = 800)
 
-        # Initialise columns to be of same size, using uniform group called 'group1'
-        self.label = tk.Label(self.frame, text = 'Chi Square Distribution', height = 2, fg = self.fg_color, bg = self.bg_color, font = self.title_font)
+        # Title
+        self.label = tk.Label(self.frame, text = 'Chi Square Simulation', height = 2, fg = self.fg_color, bg = self.bg_color, font = self.title_font)
         self.label.pack()
 
         # Initialise components - buttons
@@ -55,43 +58,104 @@ class ChiPage(DefaultWindow):
         # Remove back buttons
         self.button_frame.destroy()
 
+        # Add instruction label
+        self.inst = tk.Label(self.frame, text = 'Input a table below, with a 2x2 or bigger table', height = 2, fg = self.fg_color, bg = self.bg_color, font = self.normal_font)
+        self.inst.pack()
+
         # Input table
         self.table_frame = tk.Frame(self.frame, bg = self.bg_color, highlightbackground = self.fg_color, highlightthickness = 1)
 
         self.entries = [[] for i in range(4)]
+        self.default = True
         for row in range(4):
             for col in range(4):
                 if row == 0 and col == 0:
                     pass
                 elif row == 0 or col == 0:
                     entry = tk.Entry(self.table_frame, bg = self.bg_color, font = self.normal_font)
+                    entry.insert(tk.END, 'Title')
+                    entry.bind("<Button-1>", self._clear)
                     entry.grid(row = row, column = col)
                     self.entries[row].append(entry)
                 else:
                     entry = tk.Entry(self.table_frame, bg = self.bg_color, font = self.normal_light_font)
+                    entry.bind("<Button-1>", self._clear)
                     entry.grid(row = row, column = col)
                     self.entries[row].append(entry)
 
         self.table_frame.pack(padx = 20, pady = 20)
 
         # Sample size
-        self.sample_frame = tk.Frame(self.frame, bg = self.bg_color)
-
-        tk.Label(self.sample_frame, text = 'Sample size', height = 2, fg = self.fg_color, bg = self.bg_color, font = self.normal_font).pack(side = 'left')
-        self.sample_entry = tk.Entry(self.sample_frame, bg = self.bg_color, font = self.normal_light_font)
-        self.sample_entry.pack(side = 'left')
-
-        self.sample_frame.pack(padx = 20, pady = (0, 20))
+        self.sample_entry = tk.Entry(self.frame, bg = self.bg_color, font = self.normal_light_font)
+        self.sample_entry.insert(tk.END, 'Sample size')
+        self.sample_entry.bind("<Button-1>", self._sample_clear)
+        self.sample_entry.pack(padx = 20, pady = (0, 20))
 
         # Submit button
         self.button_go = tk.Button(self.frame, text = 'Go', height = 2, width = 10, font = self.normal_font, command = self._input_run, padx = 10)
         self.button_go.pack()
 
-        self.label_status = tk.Label(self.frame, text = '', bg = self.bg_color, fg = self.fg_color, height = 2, font = self.normal_font)
+        self.label_status = tk.Label(self.frame, text = '', bg = self.bg_color, fg = self.fg_color, height = 2, font = self.normal_light_font)
         self.label_status.pack()
 
+        # Second frame
+        self.files_frame = tk.Frame(self.frame, bg = self.bg_color, padx = 20, pady = 20)
 
-    def _input_run(self):
+        self.files_button_frame = tk.Frame(self.files_frame, bg = self.bg_color, padx = 20, pady = 20, width = 40)
+        
+        self.button_import = tk.Button(self.files_button_frame, text = 'Import file', height = 2, width = 10, font = self.normal_font, command = self._import, padx = 20)
+        self.button_import.pack(side = 'left', padx = 10)
+
+        self.button_export = tk.Button(self.files_button_frame, text = 'Export file', height = 2, width = 10, font = self.normal_font, command = self._export, padx = 20)
+        self.button_export.pack(side = 'right', padx = 10)
+
+        self.files_button_frame.pack(side = 'bottom', padx = 20)
+
+        self.files_frame.pack(side = 'bottom', fill = tk.BOTH, expand = True)
+
+
+    def _import(self):
+        try:
+
+            # Get files
+            self.file_name = tk.filedialog.askopenfilename(initialdir = os.path.join("/Users", os.environ["USER"], "Desktop", "save.stat"), filetypes = (("Stat Files", "*.stat"),))
+            if not self.file_name:
+                return False
+            self.original_data, rows, cols, self.sample_size = pickle.load(open(self.file_name, "rb"))
+            self.make_df(rows, cols)
+            
+            # Discard elements
+            self.table_frame.destroy()
+            self.button_go.destroy()
+            self.sample_entry.destroy()
+            self.inst.destroy()
+            self.files_frame.destroy()
+            
+            # Generate function
+            self._generate()
+            
+        except Exception as e:
+            self.label_status['text'] = 'Error'
+            print(e)
+
+
+    def _export(self):
+        self._input_run(export = True)
+
+
+    def _clear(self, event):
+        if self.default:
+            self.default = False
+            for i in self.entries:
+                for j in i:
+                    j.delete(0, tk.END)
+
+
+    def _sample_clear(self, event):
+        self.sample_entry.delete(0, tk.END)
+
+
+    def _input_run(self, export = False):
         
         # Read inputs
         values = [[] for i in range(4)]
@@ -143,7 +207,7 @@ class ChiPage(DefaultWindow):
                     return False
 
         # Check that all row and columns have unique names
-        names = list(values[0][1:shape[0] + 1]) + list(values.T[0][1:shape[0] + 1])
+        names = list(values[0][1:shape[1] + 1]) + list(values.T[0][1:shape[0] + 1])
         for i in range(len(names)):
             names[i] = names[i].strip()
         names = set(names)
@@ -190,22 +254,33 @@ class ChiPage(DefaultWindow):
         if self.sample_size % 10 != 0:
             self.label_status['text'] = 'Invalid, sample size must be a multiple of 10'
             return False
-        
-        # Generate self.original_data with only the data as a list
-        self.original_data = new_value.tolist()
-        
-        # Generate self.data_values with the full list version of a pd df
-        rows = values[:, 0][1:shape[0] + 1]
-        cols = values[0][1:shape[1] + 1]
-        self.make_df(rows, cols)
 
-        # Discard elements
-        self.table_frame.destroy()
-        self.button_go.destroy()
-        self.sample_frame.destroy()
-        
-        # Generate function
-        self._generate()
+        if not export:
+            
+            # Generate self.original_data with only the data as a list
+            self.original_data = new_value.tolist()
+            
+            # Generate self.data_values with the full list version of a pd df
+            rows = values[:, 0][1:shape[0] + 1]
+            cols = values[0][1:shape[1] + 1]
+            self.make_df(rows, cols)
+
+            # Discard elements
+            self.table_frame.destroy()
+            self.button_go.destroy()
+            self.sample_entry.destroy()
+            self.inst.destroy()
+            self.files_frame.destroy()
+            
+            # Generate function
+            self._generate()
+            
+        else:
+            try:
+                data_export = (new_value.tolist(), values[:, 0][1:shape[0] + 1], values[0][1:shape[1] + 1], self.sample_size)
+                pickle.dump(data_export, open(os.path.join("/Users", os.environ["USER"], "Desktop", "save.stat"), "wb"))
+            except Exception:
+                self.label_status['text'] = 'Error'
 
 
     def _random_2_chosen(self):
@@ -301,9 +376,9 @@ class ChiPage(DefaultWindow):
         self.button_show_line = tk.Button(self.button_frame, text = 'Show line', height = 2, font = self.normal_font, command = self._show_line, padx = 10)
         self.button_show_line.pack(padx = 20, expand = True, fill = tk.X, side = 'left')
 
-        self.button_frame.pack(pady = (0, 10))
+        self.button_frame.pack(pady = (0, 20))
         
-        self.chi_label = tk.Label(self.bottom_frame, text = '', bg = self.bg_color, font = self.normal_font)
+        self.chi_label = tk.Label(self.bottom_frame, text = '', bg = self.bg_color, font = self.normal_light_font)
         self.chi_label.pack()
 
         self.bottom_frame.pack(pady = (0, 20))

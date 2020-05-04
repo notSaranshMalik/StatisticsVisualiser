@@ -1,6 +1,12 @@
 from MainPage import MainPage
 import tkinter as tk
 
-root = tk.Tk()
-MainPage(root)
-root.mainloop()
+
+def main():
+    root = tk.Tk()
+    MainPage(root)
+    root.mainloop()
+
+
+if __name__ == '__main__':
+    main()
