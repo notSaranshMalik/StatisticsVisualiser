@@ -16,6 +16,8 @@ import random
 import os
 
 
+# NOTE - USE GLOBAL VARIABLES ONLY FOR FUNCTIONS, UI ELEMENTS AND GLOBALS FUNC
+
 class TPage(DefaultWindow):
     '''TPage class for the T test simulation'''
 
@@ -26,18 +28,15 @@ class TPage(DefaultWindow):
         super().__init__(parent, width = 1000, height = 800)
 
         # Initialise components
-        title_label = tk.Label(self.frame, text = 'T Test Simulation', height = 2, fg = self.fg_color, bg = self.bg_color, font = self.title_font).pack()
+        tk.Label(self.frame, text = 'T Test Simulation', height = 2, fg = self.fg_color, bg = self.bg_color, font = self.title_font).pack()
 
         self.button_frame = tk.Frame(self.frame, bg = self.bg_color)
-        button_imp = tk.Button(self.button_frame, text = 'Import data', height = 2, font = self.normal_font, command = self._import, padx = 10).pack(padx = 20, expand = True, fill = tk.X, side = 'left')
-        button_rand2 = tk.Button(self.button_frame, text = 'Random data', height = 2, font = self.normal_font, command = self._random, padx = 10).pack(padx = 20, expand = True, fill = tk.X, side = 'left')
+        tk.Button(self.button_frame, text = 'Import data', height = 2, font = self.normal_font, command = self._import, padx = 10).pack(padx = 20, expand = True, fill = tk.X, side = 'left')
+        tk.Button(self.button_frame, text = 'Random data', height = 2, font = self.normal_font, command = self._random, padx = 10).pack(padx = 20, expand = True, fill = tk.X, side = 'left')
         self.button_frame.pack()
 
         self.error_label = tk.Label(self.frame, text = '', height = 2, fg = self.fg_color, bg = self.bg_color, font = self.normal_light_font)
         self.error_label.pack(pady = 10)
-
-        # Set variables
-        self.screen_generated = False
 
 
     def _import(self):

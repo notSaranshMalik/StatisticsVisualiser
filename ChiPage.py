@@ -19,6 +19,8 @@ from collections import Counter
 import pickle
 
 
+# NOTE - USE GLOBAL VARIABLES ONLY FOR FUNCTIONS, UI ELEMENTS AND THOSE DEFINED IN INIT
+
 class ChiPage(DefaultWindow):
     '''ChiPage class for the Chi Square simulation'''
 
@@ -28,34 +30,39 @@ class ChiPage(DefaultWindow):
         # Super instantiation
         super().__init__(parent, width = 1000, height = 800)
 
-        # Title
-        self.label = tk.Label(self.frame, text = 'Chi Square Simulation', height = 2, fg = self.fg_color, bg = self.bg_color, font = self.title_font)
-        self.label.pack()
+        # Placing title label
+        tk.Label(self.frame, text = 'Chi Square Simulation', height = 2, fg = self.fg_color, bg = self.bg_color, font = self.title_font).pack()
 
-        # Initialise components - buttons
+        # Initialise  buttons
         self.button_frame = tk.Frame(self.frame, bg = self.bg_color)
         
-        self.button_imp = tk.Button(self.button_frame, text = 'Input data', height = 2, font = self.normal_font, command = self._input_chosen, padx = 10)
-        self.button_imp.pack(padx = 20, expand = True, fill = tk.X, side = 'left')
-
-        self.button_rand2 = tk.Button(self.button_frame, text = 'Random 2x2', height = 2, font = self.normal_font, command = self._random_2_chosen, padx = 10)
-        self.button_rand2.pack(padx = 20, expand = True, fill = tk.X, side = 'left')
-
-        self.button_rand3 = tk.Button(self.button_frame, text = 'Random 3x3', height = 2, font = self.normal_font, command = self._random_3_chosen, padx = 10)
-        self.button_rand3.pack(padx = 20, expand = True, fill = tk.X, side = 'left')
+        tk.Button(self.button_frame, text = 'Input data', height = 2, font = self.normal_font, command = self._input_chosen, padx = 10).pack(padx = 20, expand = True, fill = tk.X, side = 'left')
+        tk.Button(self.button_frame, text = 'Random 2x2', height = 2, font = self.normal_font, command = self._random_2_chosen, padx = 10).pack(padx = 20, expand = True, fill = tk.X, side = 'left')
+        tk.Button(self.button_frame, text = 'Random 3x3', height = 2, font = self.normal_font, command = self._random_3_chosen, padx = 10).pack(padx = 20, expand = True, fill = tk.X, side = 'left')
 
         self.button_frame.pack()
 
-        # Instantiate variables
-        self.mode = 'random'
-        self.sample_size = 100
+        # Instantiate variables - data
+        self.sample_size = None
+        self.data_values = None
+        self.dof = None
+        self.default_table = None
+        self.default_sample = None
+
+        # Instantiate variables - graph
+        self.nearest_square = None
+        self.data = None
+        self.data2 = None
+        self.line_shown = False
+
+        # Instantiate variables - animation
+        self.cycle_count = None
+        self.total_runs = None
 
 
     def _input_chosen(self):
 
-        self.mode = 'input'
-
-        # Remove back buttons
+        # Clear screen
         self.button_frame.destroy()
 
         # Add instruction label
@@ -64,9 +71,10 @@ class ChiPage(DefaultWindow):
 
         # Input table
         self.table_frame = tk.Frame(self.frame, bg = self.bg_color, highlightbackground = self.fg_color, highlightthickness = 1)
+        self.default_table = True
+        self.default_sample = True
 
         self.entries = [[] for i in range(4)]
-        self.default = True
         for row in range(4):
             for col in range(4):
                 if row == 0 and col == 0:
@@ -74,12 +82,12 @@ class ChiPage(DefaultWindow):
                 elif row == 0 or col == 0:
                     entry = tk.Entry(self.table_frame, bg = self.bg_color, font = self.normal_font)
                     entry.insert(tk.END, 'Title')
-                    entry.bind("<Button-1>", self._clear)
+                    entry.bind("<Button-1>", self._clear_instructions)
                     entry.grid(row = row, column = col)
                     self.entries[row].append(entry)
                 else:
                     entry = tk.Entry(self.table_frame, bg = self.bg_color, font = self.normal_light_font)
-                    entry.bind("<Button-1>", self._clear)
+                    entry.bind("<Button-1>", self._clear_instructions)
                     entry.grid(row = row, column = col)
                     self.entries[row].append(entry)
 
@@ -101,28 +109,25 @@ class ChiPage(DefaultWindow):
         # Second frame
         self.files_frame = tk.Frame(self.frame, bg = self.bg_color, padx = 20, pady = 20)
 
-        self.files_button_frame = tk.Frame(self.files_frame, bg = self.bg_color, padx = 20, pady = 20, width = 40)
+        files_button_frame = tk.Frame(self.files_frame, bg = self.bg_color, padx = 20, pady = 20, width = 40)
         
-        self.button_import = tk.Button(self.files_button_frame, text = 'Import file', height = 2, width = 10, font = self.normal_font, command = self._import, padx = 20)
-        self.button_import.pack(side = 'left', padx = 10)
+        tk.Button(files_button_frame, text = 'Import file', height = 2, width = 10, font = self.normal_font, command = self._import_chosen, padx = 20).pack(side = 'left', padx = 10)
+        tk.Button(files_button_frame, text = 'Export file', height = 2, width = 10, font = self.normal_font, command = self._export_chosen, padx = 20).pack(side = 'right', padx = 10)
 
-        self.button_export = tk.Button(self.files_button_frame, text = 'Export file', height = 2, width = 10, font = self.normal_font, command = self._export, padx = 20)
-        self.button_export.pack(side = 'right', padx = 10)
-
-        self.files_button_frame.pack(side = 'bottom', padx = 20)
+        files_button_frame.pack(side = 'bottom', padx = 20)
 
         self.files_frame.pack(side = 'bottom', fill = tk.BOTH, expand = True)
 
 
-    def _import(self):
+    def _import_chosen(self):
+        
         try:
 
             # Get files
-            self.file_name = tk.filedialog.askopenfilename(initialdir = os.path.join("/Users", os.environ["USER"], "Desktop", "save.stat"), filetypes = (("Stat Files", "*.stat"),))
-            if not self.file_name:
+            file_name = tk.filedialog.askopenfilename(initialdir = os.path.join("/Users", os.environ["USER"], "Desktop", "save.stat"), filetypes = (("Stat Files", "*.stat"),))
+            if not file_name:
                 return False
-            self.original_data, rows, cols, self.sample_size = pickle.load(open(self.file_name, "rb"))
-            self.make_df(rows, cols)
+            self.data_values, self.sample_size = pickle.load(open(file_name, "rb"))
             
             # Discard elements
             self.table_frame.destroy()
@@ -131,33 +136,34 @@ class ChiPage(DefaultWindow):
             self.inst.destroy()
             self.files_frame.destroy()
             
-            # Generate function
-            self._generate()
+            # Generate simulation page
+            self._simulation_page()
             
         except Exception as e:
             self.label_status['text'] = 'Error'
-            print(e)
 
 
-    def _export(self):
+    def _export_chosen(self):
         self._input_run(export = True)
 
 
-    def _clear(self, event):
-        if self.default:
-            self.default = False
+    def _clear_instructions(self, event):
+        if self.default_table:
+            self.default_table = False
             for i in self.entries:
                 for j in i:
                     j.delete(0, tk.END)
 
 
     def _sample_clear(self, event):
-        self.sample_entry.delete(0, tk.END)
+        if self.default_sample:
+            self.default_sample = False
+            self.sample_entry.delete(0, tk.END)
 
 
     def _input_run(self, export = False):
         
-        # Read inputs
+        # Read inputs from entries, saving in the values Np Array
         values = [[] for i in range(4)]
         values[0].append('_')
         for entry_row_int, entry_row in enumerate(self.entries):
@@ -215,21 +221,21 @@ class ChiPage(DefaultWindow):
             self.label_status['text'] = 'Invalid, row and column titles must all be unique'
             return False
 
-        # Check if all values are integers!
+        # Check if all values are integers! 
         try:
-            new_value = values[1:shape[0] + 1, 1:shape[1] + 1].astype(np.int)
+            values_only = values[1:shape[0] + 1, 1:shape[1] + 1].astype(np.int)
         except Exception:
             self.label_status['text'] = 'Invalid, data values need to be integers'
             return False
 
         # Check for null rows
-        for row in new_value:
+        for row in values_only:
             if not any(row):
                 self.label_status['text'] = 'Invalid, may not have null rows'
                 return False
 
         # Check for null columns
-        for col in new_value.T:
+        for col in values_only.T:
             if not any(col):
                 self.label_status['text'] = 'Invalid, may not have null columns'
                 return False
@@ -246,7 +252,7 @@ class ChiPage(DefaultWindow):
             return False
 
         # Check if sum > sample size
-        if sum(new_value.flatten()) < self.sample_size:
+        if sum(values_only.flatten()) < self.sample_size:
             self.label_status['text'] = 'Invalid, sample size must be smaller than the number of data points'
             return False
 
@@ -254,16 +260,13 @@ class ChiPage(DefaultWindow):
         if self.sample_size % 10 != 0:
             self.label_status['text'] = 'Invalid, sample size must be a multiple of 10'
             return False
+            
+        # Generate data_values with the full list version of a pd df
+        rows = values[:, 0][1:shape[0] + 1]
+        cols = values[0][1:shape[1] + 1]
+        self.data_values = self.make_df(values_only.tolist(), rows, cols)
 
         if not export:
-            
-            # Generate self.original_data with only the data as a list
-            self.original_data = new_value.tolist()
-            
-            # Generate self.data_values with the full list version of a pd df
-            rows = values[:, 0][1:shape[0] + 1]
-            cols = values[0][1:shape[1] + 1]
-            self.make_df(rows, cols)
 
             # Discard elements
             self.table_frame.destroy()
@@ -273,11 +276,11 @@ class ChiPage(DefaultWindow):
             self.files_frame.destroy()
             
             # Generate function
-            self._generate()
+            self._simulation_page()
             
         else:
             try:
-                data_export = (new_value.tolist(), values[:, 0][1:shape[0] + 1], values[0][1:shape[1] + 1], self.sample_size)
+                data_export = (self.data_values, self.sample_size)
                 pickle.dump(data_export, open(os.path.join("/Users", os.environ["USER"], "Desktop", "save.stat"), "wb"))
             except Exception:
                 self.label_status['text'] = 'Error'
@@ -286,50 +289,53 @@ class ChiPage(DefaultWindow):
     def _random_2_chosen(self):
 
         # Formatting data for use
-        self.original_data = [[random.randint(211, 225), random.randint(211, 225)], [random.randint(211, 225), random.randint(211, 225)]]
+        data = [[random.randint(211, 225), random.randint(211, 225)], [random.randint(211, 225), random.randint(211, 225)]]
         columns = ["Democrats", "Republicans"]
         rows = ["Men", "Women"]
-        self.make_df(rows, columns)
+        self.data_values = self.make_df(data, rows, columns)
+        self.sample_size = 100
 
         # Starts generation
         self.button_frame.destroy()
-        self._generate()
+        self._simulation_page()
 
 
     def _random_3_chosen(self):
 
         # Formatting data for use
-        self.original_data = [[random.randint(94, 100), random.randint(94, 100), random.randint(94, 100)], [random.randint(94, 100), random.randint(94, 100), random.randint(94, 100)], [random.randint(94, 100), random.randint(94, 100), random.randint(94, 100)]]
+        data = [[random.randint(94, 100), random.randint(94, 100), random.randint(94, 100)], [random.randint(94, 100), random.randint(94, 100), random.randint(94, 100)], [random.randint(94, 100), random.randint(94, 100), random.randint(94, 100)]]
         columns = ["Democrats", "Republicans", "Independent"]
         rows = ["Men", "Women", "Undeclared"]
-        self.make_df(rows, columns)
+        self.data_values = self.make_df(data, rows, columns)
+        self.sample_size = 100
 
         # Starts generation
         self.button_frame.destroy()
-        self._generate()
+        self._simulation_page()
 
 
-    def make_df(self, rows, columns):
-        df = pd.DataFrame.from_records(self.original_data, index = rows, columns = columns)
+    def make_df(self, data, rows, columns):
+        df = pd.DataFrame.from_records(data, index = rows, columns = columns)
         df.loc['Total'] = df.sum(numeric_only=True, axis=0)
         df.loc[:,'Total'] = df.sum(numeric_only=True, axis=1)
-        self.data_values = df.reset_index().T.reset_index().T.values
-        self.data_values[0, 0] = ''
+        data_values = df.reset_index().T.reset_index().T.values
+        data_values[0, 0] = ''
+        return data_values
 
 
-    def _generate(self):
+    def _simulation_page(self):
 
         # Initialise components - table
-        self.table_frame = tk.Frame(self.frame, bg = self.bg_color, highlightbackground = self.fg_color, highlightthickness = 1)
+        table_frame = tk.Frame(self.frame, bg = self.bg_color, highlightbackground = self.fg_color, highlightthickness = 1)
         
         for row in range(self.data_values.shape[0]):
             for col in range(self.data_values.shape[1]):
                 if row == 0 or col == 0:
-                    tk.Label(self.table_frame, text = self.data_values[row, col], bg = self.bg_color, font = self.normal_font).grid(row = row, column = col)
+                    tk.Label(table_frame, text = self.data_values[row, col], bg = self.bg_color, font = self.normal_font).grid(row = row, column = col)
                 else:
-                    tk.Label(self.table_frame, text = self.data_values[row, col], bg = self.bg_color, font = self.normal_light_font).grid(row = row, column = col)
+                    tk.Label(table_frame, text = self.data_values[row, col], bg = self.bg_color, font = self.normal_light_font).grid(row = row, column = col)
 
-        self.table_frame.pack()
+        table_frame.pack()
 
         # Initialise simulation
         self.cycle_count = 0
@@ -348,40 +354,38 @@ class ChiPage(DefaultWindow):
 
         # Set data
         self.total_runs = 0
-        self.imshow_bg = 0.06
-        self.data = np.zeros((self.nearest_square, self.nearest_square)) + self.imshow_bg
+        self.data = np.zeros((self.nearest_square, self.nearest_square)) + 0.06
         self.data2 = []
         self.plot = self.ax[0].imshow(self.data, cmap='binary', vmin = 0, vmax = 1)
         self.ax[1].hist(self.data2)
 
         # Display graph
-        self.canvas = FigureCanvasTkAgg(self.fig, master = self.frame)
-        self.canvas_widget = self.canvas.get_tk_widget()
+        canvas = FigureCanvasTkAgg(self.fig, master = self.frame)
+        self.canvas_widget = canvas.get_tk_widget()
         self.canvas_widget.pack(fill = tk.BOTH, expand = True)
 
         # Initialise new button frame
-        self.bottom_frame = tk.Frame(self.frame, bg = self.bg_color)
-        self.button_frame = tk.Frame(self.bottom_frame, bg = self.bg_color)
+        bottom_frame = tk.Frame(self.frame, bg = self.bg_color)
+        button_frame = tk.Frame(bottom_frame, bg = self.bg_color)
         
-        self.button_start = tk.Button(self.button_frame, text = 'Run once', height = 2, font = self.normal_font, command = self._run, padx = 10)
+        self.button_start = tk.Button(button_frame, text = 'Run once', height = 2, font = self.normal_font, command = self._run, padx = 10)
         self.button_start.pack(expand = True, fill = tk.X, side = 'left')
 
-        self.button_start2 = tk.Button(self.button_frame, text = 'Run 100 times', height = 2, font = self.normal_font, command = self._run_100, padx = 10)
+        self.button_start2 = tk.Button(button_frame, text = 'Run 100 times', height = 2, font = self.normal_font, command = self._run_100, padx = 10)
         self.button_start2.pack(padx = 20, expand = True, fill = tk.X, side = 'left')
 
-        self.button_start3 = tk.Button(self.button_frame, text = 'Run 1000 times', height = 2, font = self.normal_font, command = self._run_1000, padx = 10)
+        self.button_start3 = tk.Button(button_frame, text = 'Run 1000 times', height = 2, font = self.normal_font, command = self._run_1000, padx = 10)
         self.button_start3.pack(expand = True, fill = tk.X, side = 'left')
 
         self.line_shown = False
-        self.button_show_line = tk.Button(self.button_frame, text = 'Show line', height = 2, font = self.normal_font, command = self._show_line, padx = 10)
-        self.button_show_line.pack(padx = 20, expand = True, fill = tk.X, side = 'left')
+        tk.Button(button_frame, text = 'Show line', height = 2, font = self.normal_font, command = self._show_line, padx = 10).pack(padx = 20, expand = True, fill = tk.X, side = 'left')
 
-        self.button_frame.pack(pady = (0, 20))
+        button_frame.pack(pady = (0, 20))
         
-        self.chi_label = tk.Label(self.bottom_frame, text = '', bg = self.bg_color, font = self.normal_light_font)
-        self.chi_label.pack()
+        self.chi_label = tk.Label(bottom_frame, text = '', bg = self.bg_color, font = self.normal_light_font)
+        self.chi_label.pack(pady = (0, 20))
 
-        self.bottom_frame.pack(pady = (0, 20))
+        bottom_frame.pack()
             
 
     def _run(self):
@@ -392,10 +396,10 @@ class ChiPage(DefaultWindow):
             self.button_start2['state'] = tk.DISABLED
             self.button_start3['state'] = tk.DISABLED
             for _ in range(int(self.sample_size / 10)):
-                self.point = (random.randint(0, self.nearest_square - 1), random.randint(0, self.nearest_square - 1))
-                while self.data[self.point[0], self.point[1]] != self.imshow_bg:
-                    self.point = (random.randint(0, self.nearest_square - 1), random.randint(0, self.nearest_square - 1))
-                self.data[self.point[0], self.point[1]] = 0.89
+                point = (random.randint(0, self.nearest_square - 1), random.randint(0, self.nearest_square - 1))
+                while self.data[point[0], point[1]] != 0.06:
+                    point = (random.randint(0, self.nearest_square - 1), random.randint(0, self.nearest_square - 1))
+                self.data[point[0], point[1]] = 0.89
             self.plot.set_data(self.data)
             self.fig.canvas.draw()
             self.canvas_widget.after(100, self._run)
@@ -406,15 +410,12 @@ class ChiPage(DefaultWindow):
             self.button_start['state'] = tk.NORMAL
             self.button_start2['state'] = tk.NORMAL
             self.button_start3['state'] = tk.NORMAL
-            self.data = np.zeros((self.nearest_square, self.nearest_square)) + self.imshow_bg
+            self.data = np.zeros((self.nearest_square, self.nearest_square)) + 0.06
             try:
                 self._chi(single = True)
                 self._chi_update()
             except ValueError:
-                if self.mode == 'input':
-                    self.chi_label['text'] = 'Error: Got a 0 column, choose a larger sample size'
-                else:
-                    self.chi_label['text'] = 'Unexpected error: Try again'
+                self.chi_label['text'] = 'Error: Got a 0 column'
 
 
     def _run_100(self):
@@ -425,11 +426,7 @@ class ChiPage(DefaultWindow):
             try:
                 self._chi()
             except ValueError:
-                if self.mode == 'input':
-                    self.chi_label['text'] = 'Error: Got a 0 column, choose a larger sample size'
-                    continue
-                else:
-                    continue
+                continue
         self.button_start['state'] = tk.NORMAL
         self.button_start2['state'] = tk.NORMAL
         self.button_start3['state'] = tk.NORMAL
@@ -446,11 +443,7 @@ class ChiPage(DefaultWindow):
             try:
                 self._chi()
             except ValueError:
-                if self.mode == 'input':
-                    self.chi_label['text'] = 'Error: Got a 0 column, choose a larger sample size'
-                    continue
-                else:
-                    continue
+                continue
         self.button_start['state'] = tk.NORMAL
         self.button_start2['state'] = tk.NORMAL
         self.button_start3['state'] = tk.NORMAL
@@ -473,7 +466,7 @@ class ChiPage(DefaultWindow):
         # Make random selection
         counter = 0
         weights = []
-        data_og = np.array(self.original_data)
+        data_og = self.data_values[1:-1, 1:-1]
         data_prob = data_og.flatten()
         data_prob = data_prob / sum(data_prob)
         choices = random.choices(range(len(data_prob)), data_prob, k = self.sample_size)
@@ -491,11 +484,10 @@ class ChiPage(DefaultWindow):
 
         # Chi runner
         try:
-            chi2, p, dof, expected = scstats.chi2_contingency(new_data, correction = False)
-            self.dof = dof
+            chi2, p, self.dof, expected = scstats.chi2_contingency(new_data, correction = False)
             self.data2.append(chi2)
             if single:
-                self.chi_label['text'] = f'Chi Squared Value: {round(chi2, 4)}, degrees of freedom: {dof}, p-value: {round(p, 4)}'
+                self.chi_label['text'] = f'Chi Squared Value: {round(chi2, 4)}, degrees of freedom: {self.dof}, p-value: {round(p, 4)}'
         except Exception:
             raise ValueError
             
